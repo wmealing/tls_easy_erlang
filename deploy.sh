@@ -1,10 +1,12 @@
 #!/bin/bash
 
+
 # Configuration
-NUM_NODES=${1:-3}
+APP_NAME=${1:-ha_app}
+NUM_NODES=${2:-3}
 NODE_NAMES=($(for i in $(seq 1 $NUM_NODES); do echo "node$i"; done))
 COOKIE="my_secret_cookie"
-IMAGE="localhost/ha_app:latest"
+IMAGE="localhost/${APP_NAME}:latest"
 VERSION="v1"
 
 # --- macOS Compatibility: Get Local IP ---
@@ -18,6 +20,19 @@ fi
 echo "Using LOCAL_IP: $LOCAL_IP"
 echo "Deploying $NUM_NODES nodes: ${NODE_NAMES[*]}"
 
+# 0. Build images for all available apps in the apps/ directory
+echo "--- Building images for all apps in ./apps ---"
+if [ -d "apps" ]; then
+    for APP_DIR in apps/*/; do
+        DIR_NAME=$(basename "$APP_DIR")
+        if [ -f "$APP_DIR/rebar.config" ]; then
+            echo "Building image for: $DIR_NAME"
+            podman build --build-arg APP_NAME="$DIR_NAME" -t "localhost/$DIR_NAME:latest" .
+        fi
+    done
+else
+    echo "Warning: No 'apps' directory found."
+fi
 
 # 1. Setup Generator
 if [ ! -d "tls-gen" ]; then
@@ -109,5 +124,5 @@ for INDEX in "${!NODE_NAMES[@]}"; do
           -pa lib/*/ebin \
           -ra data_dir '\"data/${NAME}\"' \
           -noshell \
-          -eval 'application:ensure_all_started(ha_app), timer:sleep(infinity).'"
+          -eval \"application:ensure_all_started(${APP_NAME}), timer:sleep(infinity).\""
 done
